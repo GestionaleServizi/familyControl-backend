@@ -163,11 +163,19 @@
                                     <div class="bg-white rounded-lg shadow p-4">
                                         <h2 class="text-lg font-semibold mb-4">Dispositivi</h2>
                                         ${appState.devices.length === 0 ? 
-                                            '<p class="text-gray-500">Nessun dispositivo collegato</p>' :
+                                            '<p class="text-gray-500 text-sm">Nessun dispositivo collegato</p>' :
                                             appState.devices.map(device => `
                                                 <button onclick="selectDevice(${JSON.stringify(device).replace(/"/g, '&quot;')})" 
-                                                    class="w-full text-left p-3 rounded-lg mb-2 ${appState.selectedDevice?.id === device.id ? 'bg-blue-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}">
-                                                    <p class="font-medium">${device.name}</p>
+                                                    class="w-full text-left p-3 rounded-lg mb-2 transition ${appState.selectedDevice?.id === device.id ? 'bg-blue-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}">
+                                                    <div class="flex items-center gap-2">
+                                                        <span>${device.device_type === 'android' ? '📱' : '💻'}</span>
+                                                        <div>
+                                                            <p class="font-medium text-sm">${device.name}</p>
+                                                            <p class="text-xs ${appState.selectedDevice?.id === device.id ? 'text-blue-100' : 'text-gray-500'}">
+                                                                ${device.device_type === 'android' ? 'Smartphone' : 'PC'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
                                                 </button>
                                             `).join('')
                                         }
@@ -176,44 +184,57 @@
 
                                 <div class="lg:col-span-3">
                                     ${!appState.selectedDevice ? 
-                                        '<div class="bg-white rounded-lg shadow p-8 text-center"><p class="text-gray-500">Seleziona un dispositivo</p></div>' :
-                                        `<div class="bg-white rounded-lg shadow p-6">
-                                            <h3 class="text-lg font-semibold mb-4">Panoramica</h3>
-                                            <div class="grid grid-cols-2 gap-4 mb-6">
-                                                <div class="bg-blue-50 p-4 rounded-lg">
-                                                    <p class="text-sm text-gray-600 mb-2">⏱️ Tempo schermo</p>
-                                                    <p class="text-2xl font-bold">${appState.deviceData?.screen_time || '0'} min</p>
-                                                </div>
-                                                <div class="bg-green-50 p-4 rounded-lg">
-                                                    <p class="text-sm text-gray-600 mb-2">📱 App aperte</p>
-                                                    <p class="text-2xl font-bold">${appState.deviceData?.open_apps?.length || 0}</p>
-                                                </div>
+                                        '<div class="bg-white rounded-lg shadow p-8 text-center"><p class="text-gray-500">Seleziona un dispositivo dalla lista</p></div>' :
+                                        `<div class="bg-white rounded-lg shadow">
+                                            <div class="flex border-b">
+                                                ${['overview', 'web', 'messages', 'contacts', 'location'].map(tab => `
+                                                    <button onclick="appState.activeTab = '${tab}'; render()" 
+                                                        class="flex-1 py-4 px-2 font-medium text-sm transition ${appState.activeTab === tab ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600 hover:text-gray-900'}">
+                                                        ${tab === 'overview' ? 'Overview' : tab === 'web' ? 'Web' : tab === 'messages' ? 'Messaggi' : tab === 'contacts' ? 'Contatti' : 'Mappa'}
+                                                    </button>
+                                                `).join('')}
                                             </div>
-                                            <div class="space-y-2">
-                                                <button onclick="sendCommand('take_screenshot')" class="w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700">
-                                                    📸 Cattura Screenshot
-                                                </button>
-                                                <button onclick="sendCommand('get_whatsapp')" class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700">
-                                                    💬 Sincronizza WhatsApp
-                                                </button>
-                                                <button onclick="sendCommand('get_location')" class="w-full bg-orange-600 text-white py-2 rounded hover:bg-orange-700">
-                                                    📍 Richiedi GPS
-                                                </button>
-                                                <button onclick="sendCommand('lock_device')" class="w-full bg-red-600 text-white py-2 rounded hover:bg-red-700">
-                                                    🔒 Blocca dispositivo
-                                                </button>
-                                            </div>
-                                        </div>`
-                                    }
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-        }
-
-        render();
-    </script>
-</body>
-</html>
+                                            
+                                            <div class="p-6">
+                                                ${appState.activeTab === 'overview' ? `
+                                                    <h3 class="text-lg font-semibold mb-4">Panoramica</h3>
+                                                    <div class="grid grid-cols-2 gap-4 mb-6">
+                                                        <div class="bg-blue-50 p-4 rounded-lg">
+                                                            <p class="text-sm text-gray-600 mb-2">⏱️ Tempo schermo</p>
+                                                            <p class="text-2xl font-bold">${appState.deviceData?.screen_time || '0'} min</p>
+                                                        </div>
+                                                        <div class="bg-green-50 p-4 rounded-lg">
+                                                            <p class="text-sm text-gray-600 mb-2">📱 App aperte</p>
+                                                            <p class="text-2xl font-bold">${appState.deviceData?.open_apps?.length || 0}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="space-y-2">
+                                                        <button onclick="sendCommand('take_screenshot')" class="w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700 text-sm">
+                                                            📸 Cattura Screenshot
+                                                        </button>
+                                                        <button onclick="sendCommand('get_whatsapp')" class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 text-sm">
+                                                            💬 Sincronizza WhatsApp
+                                                        </button>
+                                                        <button onclick="sendCommand('get_location')" class="w-full bg-orange-600 text-white py-2 rounded hover:bg-orange-700 text-sm">
+                                                            📍 Richiedi GPS
+                                                        </button>
+                                                        <button onclick="sendCommand('lock_device')" class="w-full bg-red-600 text-white py-2 rounded hover:bg-red-700 text-sm">
+                                                            🔒 Blocca dispositivo
+                                                        </button>
+                                                    </div>
+                                                ` : appState.activeTab === 'web' ? `
+                                                    <h3 class="text-lg font-semibold mb-4">🌐 Cronologia Web</h3>
+                                                    ${appState.deviceData?.web_history ? 
+                                                        '<div class="space-y-2">' + appState.deviceData.web_history.map(item => `
+                                                            <div class="bg-gray-50 p-3 rounded border">
+                                                                <p class="font-medium text-sm text-blue-600 truncate">${item.url}</p>
+                                                                <p class="text-xs text-gray-500">${item.time}</p>
+                                                            </div>
+                                                        `).join('') + '</div>'
+                                                        : '<p class="text-gray-500">Nessuna cronologia disponibile</p>'
+                                                    }
+                                                ` : appState.activeTab === 'messages' ? `
+                                                    <h3 class="text-lg font-semibold mb-4">💬 Messaggi</h3>
+                                                    ${appState.deviceData?.messages ? 
+                                                        '<div class="space-y-2">' + appState.deviceData.messages.map(msg => `
+                                                            <div class
