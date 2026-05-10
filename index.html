@@ -11,14 +11,14 @@
         .header-content { max-width: 1200px; margin: 0 auto; }
         h1 { font-size: 1.875rem; font-weight: bold; }
         .container { max-width: 1200px; margin: 0 auto; padding: 0 1rem; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
-        .card { background: white; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 1.5rem; }
+        .card { background: white; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 1.5rem; margin-bottom: 1.5rem; }
         .card h2 { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; }
         .device-item { padding: 1rem; background: #f9fafb; border-radius: 0.375rem; margin-bottom: 0.5rem; border-left: 4px solid #2563eb; }
         .device-name { font-weight: 600; font-size: 0.875rem; }
         .device-status { font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem; }
         .loading { color: #6b7280; font-style: italic; }
         .error { color: #dc2626; }
+        ul { list-style: none; }
     </style>
 </head>
 <body>
@@ -30,24 +30,22 @@
     </header>
 
     <div class="container">
-        <div class="grid">
-            <div class="card">
-                <h2>📱 Dispositivi Connessi</h2>
-                <ul style="list-style: none;" id="devicesList">
-                    <li class="loading">Caricamento...</li>
-                </ul>
-            </div>
+        <div class="card">
+            <h2>📱 Dispositivi Connessi</h2>
+            <ul id="devicesList">
+                <li class="loading">Caricamento...</li>
+            </ul>
+        </div>
 
-            <div class="card">
-                <h2>📊 Statistiche</h2>
-                <div style="background: #f0f9ff; padding: 1rem; border-radius: 0.375rem; margin-bottom: 0.5rem;">
-                    <div style="font-size: 0.875rem; color: #6b7280;">Dispositivi Online</div>
-                    <div style="font-size: 1.875rem; font-weight: bold; margin-top: 0.5rem;" id="onlineCount">0</div>
-                </div>
-                <div style="background: #f0f9ff; padding: 1rem; border-radius: 0.375rem;">
-                    <div style="font-size: 0.875rem; color: #6b7280;">Ultimo Aggiornamento</div>
-                    <div style="font-size: 0.875rem; margin-top: 0.5rem;" id="lastUpdate">-</div>
-                </div>
+        <div class="card">
+            <h2>📊 Statistiche</h2>
+            <div style="background: #f0f9ff; padding: 1rem; border-radius: 0.375rem; margin-bottom: 0.5rem;">
+                <div style="font-size: 0.875rem; color: #6b7280;">Dispositivi Online</div>
+                <div style="font-size: 1.875rem; font-weight: bold; margin-top: 0.5rem;" id="onlineCount">0</div>
+            </div>
+            <div style="background: #f0f9ff; padding: 1rem; border-radius: 0.375rem;">
+                <div style="font-size: 0.875rem; color: #6b7280;">Ultimo Aggiornamento</div>
+                <div style="font-size: 0.875rem; margin-top: 0.5rem;" id="lastUpdate">-</div>
             </div>
         </div>
     </div>
@@ -55,34 +53,24 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
         const SUPABASE_URL = 'https://rclarbbasnnwmwhpoenn.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjbGFyYmJhc25ud213aHBvZW5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyMzc4OTYsImV4cCI6MjA5MzgxMzg5Nn0.yI9jvnzw_gojcR7jNVK5qBwJs9uwpBMv36vvmHwoZMQ';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjbGFyYmJhc25ud213aHBvZW5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyMzc4OTYsImV4cCI6MjA5MzgxMzg5Nn0.yI9jvnzw_gojcR7jNVK5qBwJs9uwpBMv36vvmHwoZMQ';
 
-        const { createClient } = window.supabase;
-        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+        const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         let devices = [];
 
         async function loadDevices() {
             try {
-                console.log('Caricando dispositivi...');
-                const { data, error } = await supabase
+                const { data, error } = await sbClient
                     .from('devices')
                     .select('*')
                     .order('last_seen', { ascending: false });
 
-                if (error) {
-                    console.error('Errore Supabase:', error);
-                    document.getElementById('devicesList').innerHTML = '<li class="error">❌ Errore nel caricamento</li>';
-                    return;
-                }
-
-                console.log('Dispositivi caricati:', data);
+                if (error) throw error;
                 devices = data || [];
                 renderDevices();
-                updateStats();
             } catch (error) {
                 console.error('Errore:', error);
-                document.getElementById('devicesList').innerHTML = '<li class="error">❌ Errore nel caricamento</li>';
+                document.getElementById('devicesList').innerHTML = '<li class="error">Errore nel caricamento</li>';
             }
         }
 
@@ -90,22 +78,20 @@
             const list = document.getElementById('devicesList');
             
             if (devices.length === 0) {
-                list.innerHTML = '<li class="loading">Nessun dispositivo connesso</li>';
+                list.innerHTML = '<li class="loading">Nessun dispositivo</li>';
                 return;
             }
 
             list.innerHTML = devices.map(device => `
                 <li class="device-item">
-                    <div class="device-name">${device.name || 'Unknown'}</div>
+                    <div class="device-name">${device.name}</div>
                     <div class="device-status">
                         ${device.status === 'online' ? '🟢 Online' : '🔴 Offline'}
                         • ${new Date(device.last_seen).toLocaleTimeString('it-IT')}
                     </div>
                 </li>
             `).join('');
-        }
 
-        function updateStats() {
             const onlineCount = devices.filter(d => d.status === 'online').length;
             document.getElementById('onlineCount').textContent = onlineCount;
             
