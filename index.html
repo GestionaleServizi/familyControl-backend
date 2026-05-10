@@ -14,10 +14,6 @@
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
         .card { background: white; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 1.5rem; }
         .card h2 { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; }
-        .stat { background: #f0f9ff; padding: 1rem; border-radius: 0.375rem; margin-bottom: 0.5rem; }
-        .stat-label { font-size: 0.875rem; color: #6b7280; }
-        .stat-value { font-size: 1.875rem; font-weight: bold; margin-top: 0.5rem; }
-        .devices-list { list-style: none; }
         .device-item { padding: 1rem; background: #f9fafb; border-radius: 0.375rem; margin-bottom: 0.5rem; border-left: 4px solid #2563eb; }
         .device-name { font-weight: 600; font-size: 0.875rem; }
         .device-status { font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem; }
@@ -35,32 +31,22 @@
 
     <div class="container">
         <div class="grid">
-            <!-- Dispositivi -->
             <div class="card">
                 <h2>📱 Dispositivi Connessi</h2>
-                <ul class="devices-list" id="devicesList">
+                <ul style="list-style: none;" id="devicesList">
                     <li class="loading">Caricamento...</li>
                 </ul>
             </div>
 
-            <!-- Statistiche -->
             <div class="card">
                 <h2>📊 Statistiche</h2>
-                <div class="stat">
-                    <div class="stat-label">Dispositivi Online</div>
-                    <div class="stat-value" id="onlineCount">0</div>
+                <div style="background: #f0f9ff; padding: 1rem; border-radius: 0.375rem; margin-bottom: 0.5rem;">
+                    <div style="font-size: 0.875rem; color: #6b7280;">Dispositivi Online</div>
+                    <div style="font-size: 1.875rem; font-weight: bold; margin-top: 0.5rem;" id="onlineCount">0</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">Ultimo Aggiornamento</div>
+                <div style="background: #f0f9ff; padding: 1rem; border-radius: 0.375rem;">
+                    <div style="font-size: 0.875rem; color: #6b7280;">Ultimo Aggiornamento</div>
                     <div style="font-size: 0.875rem; margin-top: 0.5rem;" id="lastUpdate">-</div>
-                </div>
-            </div>
-
-            <!-- Ultime Attività -->
-            <div class="card">
-                <h2>⏱️ Attività Recente</h2>
-                <div id="activity" style="font-size: 0.875rem; color: #6b7280;">
-                    <p class="loading">Caricamento...</p>
                 </div>
             </div>
         </div>
@@ -75,38 +61,28 @@
         const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         let devices = [];
-        let deviceData = [];
 
         async function loadDevices() {
             try {
+                console.log('Caricando dispositivi...');
                 const { data, error } = await supabase
                     .from('devices')
                     .select('*')
                     .order('last_seen', { ascending: false });
 
-                if (error) throw error;
+                if (error) {
+                    console.error('Errore Supabase:', error);
+                    document.getElementById('devicesList').innerHTML = '<li class="error">❌ Errore nel caricamento</li>';
+                    return;
+                }
+
+                console.log('Dispositivi caricati:', data);
                 devices = data || [];
                 renderDevices();
                 updateStats();
             } catch (error) {
                 console.error('Errore:', error);
                 document.getElementById('devicesList').innerHTML = '<li class="error">❌ Errore nel caricamento</li>';
-            }
-        }
-
-        async function loadDeviceData() {
-            try {
-                const { data, error } = await supabase
-                    .from('device_data')
-                    .select('*')
-                    .order('created_at', { ascending: false })
-                    .limit(10);
-
-                if (error) throw error;
-                deviceData = data || [];
-                updateActivity();
-            } catch (error) {
-                console.error('Errore:', error);
             }
         }
 
@@ -120,7 +96,7 @@
 
             list.innerHTML = devices.map(device => `
                 <li class="device-item">
-                    <div class="device-name">${device.name}</div>
+                    <div class="device-name">${device.name || 'Unknown'}</div>
                     <div class="device-status">
                         ${device.status === 'online' ? '🟢 Online' : '🔴 Offline'}
                         • ${new Date(device.last_seen).toLocaleTimeString('it-IT')}
@@ -139,33 +115,8 @@
                 : '-';
         }
 
-        function updateActivity() {
-            const activity = document.getElementById('activity');
-            
-            if (deviceData.length === 0) {
-                activity.innerHTML = '<p class="loading">Nessuna attività registrata</p>';
-                return;
-            }
-
-            activity.innerHTML = deviceData.slice(0, 5).map(data => `
-                <div style="margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;">
-                    <div style="font-weight: 600;">${data.device_id}</div>
-                    <div style="color: #6b7280; font-size: 0.75rem;">
-                        ${new Date(data.created_at).toLocaleString('it-IT')}
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        // Carica i dati inizialmente
         loadDevices();
-        loadDeviceData();
-
-        // Aggiorna ogni 10 secondi
-        setInterval(() => {
-            loadDevices();
-            loadDeviceData();
-        }, 10000);
+        setInterval(loadDevices, 10000);
     </script>
 </body>
 </html>
