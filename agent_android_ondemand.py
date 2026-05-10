@@ -14,8 +14,7 @@ import requests
 
 # Configurazione Supabase
 SUPABASE_URL = 'https://rclarbbasnnwmwhpoenn.supabase.co'
-SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6InNlcnZpY2Vfcm9sZSIsImlzcyI6InN1cGFiYXNlIiwicmVmIjoicmNsYXJiYmFzbm53bXdocG9lbm4iLCJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNzc4MjM3ODk2LCJleHAiOjIwOTM4MTM4OTZ9.JqC7WX6-HbWk4NlJoDmSa46XGn74bmfO3dxwVgOv6hU'
-
+SUPABASE_SERVICE_KEY = 'sb_secret_HP-U3Ym49ORajP_f6oNWoQ_aCDwLWnK'
 # ID dispositivo
 try:
     DEVICE_ID = subprocess.check_output(['getprop', 'ro.serialno']).decode().strip()
