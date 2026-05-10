@@ -3,141 +3,169 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FamilyControl - Secure</title>
+    <title>FamilyControl Dashboard</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; color: #1f2937; }
-        .min-h-screen { min-height: 100vh; }
-        .flex { display: flex; }
-        .items-center { align-items: center; }
-        .justify-center { justify-content: center; }
-        .bg-gradient { background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); }
-        .bg-white { background: white; }
-        .rounded-lg { border-radius: 0.5rem; }
-        .shadow-2xl { box-shadow: 0 25px 50px rgba(0,0,0,0.25); }
-        .p-4 { padding: 1rem; }
-        .p-6 { padding: 1.5rem; }
-        .p-8 { padding: 2rem; }
-        .mb-4 { margin-bottom: 1rem; }
-        .mb-6 { margin-bottom: 1.5rem; }
-        .w-96 { width: 24rem; }
-        .text-center { text-align: center; }
-        .text-2xl { font-size: 1.5rem; }
-        .text-3xl { font-size: 1.875rem; }
-        .font-bold { font-weight: 700; }
-        .font-semibold { font-weight: 600; }
-        .text-gray-600 { color: #4b5563; }
-        .text-gray-800 { color: #1f2937; }
-        .text-white { color: white; }
-        input { width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem; margin-bottom: 1rem; font-size: 1rem; }
-        input:focus { outline: none; border-color: #2563eb; }
-        button { width: 100%; padding: 0.75rem; border: none; border-radius: 0.375rem; cursor: pointer; margin-bottom: 0.5rem; font-weight: 500; font-size: 1rem; }
-        .btn-primary { background: #2563eb; color: white; }
-        .btn-primary:hover { background: #1d4ed8; }
-        .btn-red { background: #dc2626; color: white; width: auto; }
-        .error { color: #dc2626; font-size: 0.875rem; margin-bottom: 0.5rem; }
-        .user-email { font-size: 0.875rem; color: #6b7280; margin-right: 1rem; }
-        header { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 1rem; margin-bottom: 1.5rem; }
-        .header-content { max-width: 80rem; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; padding: 0 1rem; }
+        header { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 1.5rem; margin-bottom: 2rem; }
+        .header-content { max-width: 1200px; margin: 0 auto; }
+        h1 { font-size: 1.875rem; font-weight: bold; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 1rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+        .card { background: white; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 1.5rem; }
+        .card h2 { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; }
+        .stat { background: #f0f9ff; padding: 1rem; border-radius: 0.375rem; margin-bottom: 0.5rem; }
+        .stat-label { font-size: 0.875rem; color: #6b7280; }
+        .stat-value { font-size: 1.875rem; font-weight: bold; margin-top: 0.5rem; }
+        .devices-list { list-style: none; }
+        .device-item { padding: 1rem; background: #f9fafb; border-radius: 0.375rem; margin-bottom: 0.5rem; border-left: 4px solid #2563eb; }
+        .device-name { font-weight: 600; font-size: 0.875rem; }
+        .device-status { font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem; }
+        .loading { color: #6b7280; font-style: italic; }
+        .error { color: #dc2626; }
     </style>
 </head>
 <body>
-    <div id="app"></div>
+    <header>
+        <div class="header-content">
+            <h1>🔐 FamilyControl Dashboard</h1>
+            <p style="color: #6b7280; margin-top: 0.5rem;">Monitoraggio dispositivi in tempo reale</p>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="grid">
+            <!-- Dispositivi -->
+            <div class="card">
+                <h2>📱 Dispositivi Connessi</h2>
+                <ul class="devices-list" id="devicesList">
+                    <li class="loading">Caricamento...</li>
+                </ul>
+            </div>
+
+            <!-- Statistiche -->
+            <div class="card">
+                <h2>📊 Statistiche</h2>
+                <div class="stat">
+                    <div class="stat-label">Dispositivi Online</div>
+                    <div class="stat-value" id="onlineCount">0</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Ultimo Aggiornamento</div>
+                    <div style="font-size: 0.875rem; margin-top: 0.5rem;" id="lastUpdate">-</div>
+                </div>
+            </div>
+
+            <!-- Ultime Attività -->
+            <div class="card">
+                <h2>⏱️ Attività Recente</h2>
+                <div id="activity" style="font-size: 0.875rem; color: #6b7280;">
+                    <p class="loading">Caricamento...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        const API_BASE = window.location.origin;
-        
-        let appState = {
-            user: null,
-            token: null,
-            loginError: ''
-        };
+        const SUPABASE_URL = 'https://rclarbbasnnwmwhpoenn.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjbGFyYmJhc25ud213aHBvZW5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyMzc4OTYsImV4cCI6MjA5MzgxMzg5Nn0.yI9jvnzw_gojcR7jNVK5qBwJs9uwpBMv36vvmHwoZMQ';
 
-        async function handleLogin(e) {
-            e.preventDefault();
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            
-            appState.loginError = '';
+        const { createClient } = window.supabase;
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+        let devices = [];
+        let deviceData = [];
+
+        async function loadDevices() {
             try {
-                const response = await fetch(`${API_BASE}/api/auth/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
-                });
+                const { data, error } = await supabase
+                    .from('devices')
+                    .select('*')
+                    .order('last_seen', { ascending: false });
 
-                const data = await response.json();
-
-                if (!response.ok || data.error) {
-                    appState.loginError = '❌ Email o password errata!';
-                    render();
-                    return;
-                }
-
-                appState.user = data.user;
-                appState.token = data.token;
-                localStorage.setItem('auth_token', data.token);
-                render();
+                if (error) throw error;
+                devices = data || [];
+                renderDevices();
+                updateStats();
             } catch (error) {
-                appState.loginError = '❌ Errore di connessione';
-                render();
+                console.error('Errore:', error);
+                document.getElementById('devicesList').innerHTML = '<li class="error">❌ Errore nel caricamento</li>';
             }
         }
 
-        function logout() {
-            localStorage.removeItem('auth_token');
-            appState.user = null;
-            appState.token = null;
-            render();
+        async function loadDeviceData() {
+            try {
+                const { data, error } = await supabase
+                    .from('device_data')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+                    .limit(10);
+
+                if (error) throw error;
+                deviceData = data || [];
+                updateActivity();
+            } catch (error) {
+                console.error('Errore:', error);
+            }
         }
 
-        function render() {
-            const app = document.getElementById('app');
+        function renderDevices() {
+            const list = document.getElementById('devicesList');
             
-            if (!appState.user) {
-                app.innerHTML = `
-                    <div class="min-h-screen flex items-center justify-center bg-gradient">
-                        <div class="bg-white rounded-lg shadow-2xl p-8 w-96">
-                            <h1 class="text-3xl font-bold text-center mb-2 text-gray-800">FamilyControl</h1>
-                            <p class="text-center text-gray-600 mb-6" style="font-size: 0.875rem;">Autenticazione Sicura 🔐</p>
-                            
-                            ${appState.loginError ? `<div class="error text-center">${appState.loginError}</div>` : ''}
-                            
-                            <form onsubmit="handleLogin(event);">
-                                <input type="email" id="email" placeholder="Email" required autofocus />
-                                <input type="password" id="password" placeholder="Password" required />
-                                <button type="submit" class="btn-primary">Accedi</button>
-                            </form>
-                            <p style="text-align: center; font-size: 0.75rem; color: #9ca3af; margin-top: 1rem;">
-                                Password cifrate nel database Supabase
-                            </p>
-                        </div>
-                    </div>
-                `;
-            } else {
-                app.innerHTML = `
-                    <header>
-                        <div class="header-content">
-                            <h1 class="text-2xl font-bold">FamilyControl</h1>
-                            <div style="display: flex; align-items: center;">
-                                <span class="user-email">👤 ${appState.user.email}</span>
-                                <button onclick="logout()" class="btn-red">Logout</button>
-                            </div>
-                        </div>
-                    </header>
-                    <div style="max-width: 80rem; margin: 0 auto; padding: 0 1rem;">
-                        <div class="bg-white rounded-lg p-8" style="box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                            <h2 class="text-2xl font-bold mb-4">Dashboard</h2>
-                            <p class="text-gray-600">Benvenuto ${appState.user.email}! ✅</p>
-                            <p class="text-gray-600" style="margin-top: 1rem;">Il backend è sicuro e protetto! 🔐</p>
-                            <p class="text-gray-600" style="margin-top: 1rem;">Sito: <strong>${API_BASE}</strong></p>
-                        </div>
-                    </div>
-                `;
+            if (devices.length === 0) {
+                list.innerHTML = '<li class="loading">Nessun dispositivo connesso</li>';
+                return;
             }
+
+            list.innerHTML = devices.map(device => `
+                <li class="device-item">
+                    <div class="device-name">${device.name}</div>
+                    <div class="device-status">
+                        ${device.status === 'online' ? '🟢 Online' : '🔴 Offline'}
+                        • ${new Date(device.last_seen).toLocaleTimeString('it-IT')}
+                    </div>
+                </li>
+            `).join('');
         }
 
-        render();
+        function updateStats() {
+            const onlineCount = devices.filter(d => d.status === 'online').length;
+            document.getElementById('onlineCount').textContent = onlineCount;
+            
+            const lastSeen = devices.length > 0 ? new Date(devices[0].last_seen) : null;
+            document.getElementById('lastUpdate').textContent = lastSeen 
+                ? lastSeen.toLocaleString('it-IT')
+                : '-';
+        }
+
+        function updateActivity() {
+            const activity = document.getElementById('activity');
+            
+            if (deviceData.length === 0) {
+                activity.innerHTML = '<p class="loading">Nessuna attività registrata</p>';
+                return;
+            }
+
+            activity.innerHTML = deviceData.slice(0, 5).map(data => `
+                <div style="margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;">
+                    <div style="font-weight: 600;">${data.device_id}</div>
+                    <div style="color: #6b7280; font-size: 0.75rem;">
+                        ${new Date(data.created_at).toLocaleString('it-IT')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Carica i dati inizialmente
+        loadDevices();
+        loadDeviceData();
+
+        // Aggiorna ogni 10 secondi
+        setInterval(() => {
+            loadDevices();
+            loadDeviceData();
+        }, 10000);
     </script>
 </body>
 </html>
