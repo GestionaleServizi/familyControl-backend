@@ -1,9 +1,10 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
-require('dotenv').config();
 
 const app = express();
 
@@ -29,13 +30,22 @@ app.use(express.json());
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({
+    status: 'ok',
+    database: 'connected'
+  });
 });
 
-// Login reale PostgreSQL
+// Login PostgreSQL + JWT
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({
+        error: 'Username e password obbligatori'
+      });
+    }
 
     // Cerca utente
     const result = await pool.query(
@@ -63,7 +73,7 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // JWT
+    // JWT token
     const token = jwt.sign(
       {
         id: user.id,
@@ -86,7 +96,7 @@ app.post('/api/auth/login', async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
+    console.error('LOGIN ERROR:', error);
 
     res.status(500).json({
       error: 'Errore server'
@@ -94,8 +104,57 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Route temporanea reset password
+app.post('/api/debug/reset-password', async (req, res) => {
+  try {
+    const { username, password, secret } = req.body;
+
+    if (secret !== process.env.RESET_SECRET) {
+      return res.status(403).json({
+        error: 'Forbidden'
+      });
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+
+    await pool.query(
+      'UPDATE users SET password_hash = $1 WHERE username = $2',
+      [hash, username]
+    );
+
+    res.json({
+      status: 'ok',
+      username,
+      message: 'Password aggiornata'
+    });
+
+  } catch (error) {
+    console.error('RESET ERROR:', error);
+
+    res.status(500).json({
+      error: 'Errore reset password'
+    });
+  }
+});
+
+// Test devices route
+app.get('/api/devices', (req, res) => {
+  res.json([
+    {
+      id: 1,
+      name: 'Samsung Galaxy',
+      status: 'online'
+    },
+    {
+      id: 2,
+      name: 'iPhone',
+      status: 'offline'
+    }
+  ]);
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`Server on ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
