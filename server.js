@@ -4,9 +4,23 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const compression = require('compression');
+const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
 
 const app = express();
+
+if (!process.env.DATABASE_URL) {
+  console.error('❌ DATABASE_URL mancante');
+  process.exit(1);
+}
+
+if (!process.env.JWT_SECRET) {
+  console.error('❌ JWT_SECRET mancante');
+  process.exit(1);
+}
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -14,6 +28,11 @@ const pool = new Pool({
     rejectUnauthorized: false
   }
 });
+
+// Security middleware
+app.use(helmet());
+app.use(compression());
+app.use(morgan('combined'));
 
 app.use(cors({
   origin: [
@@ -24,8 +43,27 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
+// Rate limit generale
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  message: {
+    error: 'Troppe richieste, riprova più tardi'
+  }
+}));
+
+// Rate limit login
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: {
+    error: 'Troppi tentativi di login, riprova più tardi'
+  }
+});
+
+// Health check
 app.get('/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
@@ -44,7 +82,8 @@ app.get('/health', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+// Login
+app.post('/api/auth/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
 
@@ -55,7 +94,11 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const result = await pool.query(
-      'SELECT id, username, password_hash, email FROM users WHERE username = $1',
+      `
+      SELECT id, username, password_hash, email
+      FROM users
+      WHERE username = $1
+      `,
       [username]
     );
 
@@ -108,22 +151,17 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Middleware JWT
 function verifyToken(req, res, next) {
   const authHeader = req.headers.authorization;
 
-  if (!authHeader) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({
-      error: 'Token mancante'
+      error: 'Token mancante o non valido'
     });
   }
 
   const token = authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({
-      error: 'Token non valido'
-    });
-  }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -136,6 +174,18 @@ function verifyToken(req, res, next) {
   }
 }
 
+// Profilo utente autenticato
+app.get('/api/auth/me', verifyToken, async (req, res) => {
+  res.json({
+    user: {
+      id: req.user.id,
+      username: req.user.username,
+      email: req.user.email
+    }
+  });
+});
+
+// Devices protetta
 app.get('/api/devices', verifyToken, async (req, res) => {
   try {
     const result = await pool.query(
@@ -149,6 +199,7 @@ app.get('/api/devices', verifyToken, async (req, res) => {
     );
 
     res.json(result.rows);
+
   } catch (error) {
     console.error('DEVICES ERROR:', error);
 
@@ -158,39 +209,20 @@ app.get('/api/devices', verifyToken, async (req, res) => {
   }
 });
 
-app.post('/api/debug/create-user', async (req, res) => {
-  try {
-    const { username, password, email, secret } = req.body;
+// 404 API
+app.use('/api', (req, res) => {
+  res.status(404).json({
+    error: 'Endpoint non trovato'
+  });
+});
 
-    if (secret !== process.env.RESET_SECRET) {
-      return res.status(403).json({
-        error: 'Forbidden'
-      });
-    }
+// Error handler finale
+app.use((error, req, res, next) => {
+  console.error('GLOBAL ERROR:', error);
 
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    const result = await pool.query(
-      `
-      INSERT INTO users (username, password_hash, email)
-      VALUES ($1, $2, $3)
-      RETURNING id, username, email, created_at
-      `,
-      [username, passwordHash, email]
-    );
-
-    res.status(201).json({
-      status: 'ok',
-      user: result.rows[0]
-    });
-
-  } catch (error) {
-    console.error('CREATE USER ERROR:', error);
-
-    res.status(500).json({
-      error: 'Errore creazione utente'
-    });
-  }
+  res.status(500).json({
+    error: 'Errore interno server'
+  });
 });
 
 const PORT = process.env.PORT || 3000;
