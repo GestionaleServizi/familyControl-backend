@@ -1,326 +1,314 @@
 #!/usr/bin/env python3
 """
-FamilyControl Agent Android (Termux) - MODALITÀ ON-DEMAND
-NON riempie il database - Invia SOLO dati richiesti via comandi
+FamilyControl Agent Android (Termux)
+Si collega al backend Railway e invia dati
 """
 
 import os
 import json
 import time
-import socket
 import subprocess
-from datetime import datetime
 import requests
+import socket
+from datetime import datetime
 
-# Configurazione Supabase
-SUPABASE_URL = 'https://rclarbbasnnwmwhpoenn.supabase.co'
-SUPABASE_SERVICE_KEY = 'sb_secret_HP-U3Ym49ORajP_f6oNWoQ_aCDwLWnK'
-# ID dispositivo
+# ==================== CONFIGURAZIONE ====================
+# ⚠️ CAMBIA CON IL TUO BACKEND URL
+BACKEND_URL = "https://familycontrol-backend-production.up.railway.app"
+
+# Credenziali per autenticazione
+USERNAME = "admin"
+PASSWORD = "admin123"
+
+# ID dispositivo (generato automaticamente)
 try:
     DEVICE_ID = subprocess.check_output(['getprop', 'ro.serialno']).decode().strip()
+    if not DEVICE_ID or DEVICE_ID == "unknown":
+        DEVICE_ID = socket.gethostname()
 except:
-    DEVICE_ID = f"android-termux"
+    DEVICE_ID = socket.gethostname()
 
-DEVICE_NAME = f"Smartphone Android"
+DEVICE_NAME = f"Android_{DEVICE_ID[:8]}"
 DEVICE_TYPE = "android"
 
-# Headers per Supabase
-HEADERS = {
-    'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
-    'Content-Type': 'application/json',
-    'apikey': SUPABASE_SERVICE_KEY
-}
+# ==================== FUNZIONI ====================
 
-class FamilyControlAgentAndroid:
-    def __init__(self):
-        self.device_id = DEVICE_ID
-        self.running = True
-        self.commands_executed = 0
+def get_token():
+    """Ottiene token JWT dal backend"""
+    try:
+        print("🔐 Autenticazione in corso...")
+        response = requests.post(
+            f"{BACKEND_URL}/api/auth/login",
+            json={"username": USERNAME, "password": PASSWORD},
+            timeout=10
+        )
         
-        print("""
-╔════════════════════════════════════════════════════════════╗
-║  FamilyControl Android - MODALITÀ ON-DEMAND               ║
-║  ✅ NON riempie il database                               ║
-║  ✅ Controlla comandi ogni 5 secondi                      ║
-║  ✅ Invia SOLO dati richiesti                             ║
-╚════════════════════════════════════════════════════════════╝
-        """)
+        if response.status_code == 200:
+            token = response.json().get("token")
+            print("✅ Token ottenuto")
+            return token
+        else:
+            print(f"❌ Login fallito: {response.status_code}")
+            if response.status_code == 401:
+                print("   Verifica username/password nel database")
+            return None
+    except requests.exceptions.ConnectionError:
+        print(f"❌ Impossibile connettersi a {BACKEND_URL}")
+        print("   Verifica che il backend sia online")
+        return None
+    except Exception as e:
+        print(f"❌ Errore login: {e}")
+        return None
 
-    def register_device(self):
-        """Registra il dispositivo su Supabase"""
-        try:
-            response = requests.get(
-                f'{SUPABASE_URL}/rest/v1/devices?id=eq.{self.device_id}',
-                headers=HEADERS,
-                timeout=10
-            )
-            
-            if response.status_code == 200 and len(response.json()) == 0:
-                device_data = {
-                    'id': self.device_id,
-                    'name': DEVICE_NAME,
-                    'device_type': DEVICE_TYPE,
-                    'status': 'online',
-                    'last_seen': datetime.now().isoformat()
-                }
-                
-                response = requests.post(
-                    f'{SUPABASE_URL}/rest/v1/devices',
-                    headers=HEADERS,
-                    json=device_data,
-                    timeout=10
-                )
-                print(f"✅ Dispositivo registrato: {DEVICE_NAME}")
-            else:
-                self.update_device_status('online')
-                print(f"✅ Dispositivo già registrato: {DEVICE_NAME}")
-                
-        except Exception as e:
-            print(f"❌ Errore registrazione: {e}")
-
-    def update_device_status(self, status):
-        """Aggiorna solo lo status"""
-        try:
-            requests.patch(
-                f'{SUPABASE_URL}/rest/v1/devices?id=eq.{self.device_id}',
-                headers=HEADERS,
-                json={'status': status, 'last_seen': datetime.now().isoformat()},
-                timeout=5
-            )
-        except Exception as e:
-            print(f"⚠️ Errore status: {e}")
-
-    def get_device_info(self):
-        """Ottiene info dispositivo"""
-        try:
-            brand = subprocess.check_output(['getprop', 'ro.product.brand']).decode().strip()
-            model = subprocess.check_output(['getprop', 'ro.product.model']).decode().strip()
-            android_version = subprocess.check_output(['getprop', 'ro.build.version.release']).decode().strip()
-            
-            return {
-                'device_name': f"{brand} {model}",
-                'android_version': android_version,
-                'timestamp': datetime.now().isoformat()
-            }
-        except:
-            return {'error': 'Impossibile leggere info dispositivo'}
-
-    def get_installed_apps(self):
-        """Ottiene lista app installate"""
-        try:
-            result = subprocess.check_output(['pm', 'list', 'packages']).decode()
-            apps = [line.replace('package:', '') for line in result.split('\n') if 'package:' in line]
-            return apps[:30]  # Prime 30 app
-        except:
-            return []
-
-    def get_running_apps(self):
-        """Ottiene app in esecuzione"""
-        try:
-            result = subprocess.check_output(['ps']).decode()
-            lines = result.split('\n')[1:]  # Salta header
-            apps = []
-            for line in lines[:20]:
-                parts = line.split()
-                if len(parts) > 1:
-                    app_name = parts[-1]
-                    apps.append(app_name)
-            return apps
-        except:
-            return []
-
-    def get_battery_info(self):
-        """Ottiene info batteria"""
-        try:
-            result = subprocess.check_output(['dumpsys', 'battery']).decode()
-            battery_info = {}
-            for line in result.split('\n'):
-                if 'level:' in line:
-                    battery_info['level'] = line.split('level:')[1].strip()
-                if 'temperature:' in line:
-                    battery_info['temperature'] = line.split('temperature:')[1].strip()
-                if 'status:' in line and 'status:' in line:
-                    battery_info['status'] = line.split('status:')[1].strip()
-            return battery_info
-        except:
-            return {}
-
-    def get_screen_time(self):
-        """Calcola tempo schermo (approssimativo)"""
-        try:
-            result = subprocess.check_output(['dumpsys', 'usagestats']).decode()
-            # Parsing semplice
-            return {'screen_on_time': 'Unknown'}
-        except:
-            return {}
-
-    def get_contacts(self):
-        """Ottiene numero contatti (info generica)"""
-        try:
-            # In Termux non possiamo accedere direttamente ai contatti
-            # Restituiamo un numero fittizio
-            return {'total_contacts': 'N/A', 'note': 'Accesso contatti limitato in Termux'}
-        except:
-            return {}
-
-    def get_whatsapp_info(self):
-        """Controlla se WhatsApp è installato"""
-        try:
-            result = subprocess.check_output(['pm', 'list', 'packages'], stderr=subprocess.DEVNULL).decode()
-            if 'com.whatsapp' in result:
-                return {'whatsapp_installed': True, 'status': 'Installato'}
-            else:
-                return {'whatsapp_installed': False, 'status': 'Non installato'}
-        except:
-            return {'error': 'Impossibile verificare'}
-
-    def get_location(self):
-        """Ottiene posizione (richiede servizi di localizzazione)"""
-        try:
-            # In Termux è difficile accedere alla localizzazione
-            # Restituiamo un messaggio informativo
-            return {
-                'location': 'Non disponibile in Termux',
-                'note': 'Richiede accesso a servizi GPS',
-                'status': 'Location services disabled'
-            }
-        except:
-            return {'error': 'Impossibile ottenere posizione'}
-
-    def send_data_on_demand(self, data_type, data_content):
-        """Invia dati on-demand a Supabase"""
-        try:
-            payload = {
-                'device_id': self.device_id,
-                'device_type': DEVICE_TYPE,
-                'created_at': datetime.now().isoformat()
-            }
-            
-            payload[data_type] = data_content
-            
-            response = requests.post(
-                f'{SUPABASE_URL}/rest/v1/device_data',
-                headers=HEADERS,
-                json=payload,
-                timeout=30
-            )
-            
-            if response.status_code in [200, 201]:
-                print(f"✅ {data_type} inviato a Supabase")
-                return True
-            else:
-                print(f"❌ Errore invio {data_type}: {response.status_code}")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Errore invio: {e}")
+def register_device(token):
+    """Registra il dispositivo sul backend"""
+    try:
+        print("📝 Registrazione dispositivo...")
+        response = requests.post(
+            f"{BACKEND_URL}/api/devices/register",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={
+                "deviceId": DEVICE_ID,
+                "deviceName": DEVICE_NAME,
+                "deviceType": DEVICE_TYPE
+            },
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            print(f"✅ Dispositivo registrato: {DEVICE_NAME}")
+            print(f"   ID: {DEVICE_ID}")
+            return True
+        else:
+            print(f"❌ Registrazione fallita: {response.status_code}")
+            if response.status_code == 401:
+                print("   Token scaduto o non valido")
             return False
+    except Exception as e:
+        print(f"❌ Errore registrazione: {e}")
+        return False
 
-    def check_commands(self):
-        """Controlla comandi pendenti"""
-        try:
-            response = requests.get(
-                f'{SUPABASE_URL}/rest/v1/commands?device_id=eq.{self.device_id}&status=eq.pending',
-                headers=HEADERS,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                commands = response.json()
-                for cmd in commands:
-                    self.execute_command(cmd)
-                    
-        except Exception as e:
-            print(f"⚠️ Errore lettura comandi: {e}")
-
-    def execute_command(self, cmd):
-        """Esegue comandi on-demand"""
-        try:
-            command = cmd['command']
-            self.commands_executed += 1
-            
-            print(f"\n📡 Comando ricevuto: {command}")
-            print(f"   (Totale comandi: {self.commands_executed})")
-            
-            if command == 'get_device_info':
-                info = self.get_device_info()
-                self.send_data_on_demand('device_info', info)
-                
-            elif command == 'get_apps':
-                apps = self.get_running_apps()
-                self.send_data_on_demand('open_apps', apps)
-                
-            elif command == 'get_battery':
-                battery = self.get_battery_info()
-                self.send_data_on_demand('battery_info', battery)
-                
-            elif command == 'get_contacts':
-                contacts = self.get_contacts()
-                self.send_data_on_demand('contacts', contacts)
-                
-            elif command == 'get_whatsapp':
-                whatsapp = self.get_whatsapp_info()
-                self.send_data_on_demand('whatsapp_status', whatsapp)
-                
-            elif command == 'get_location':
-                location = self.get_location()
-                self.send_data_on_demand('location', location)
-                
-            elif command == 'get_screen_time':
-                screen = self.get_screen_time()
-                self.send_data_on_demand('screen_time', screen)
-                
-            elif command == 'get_installed_apps':
-                apps = self.get_installed_apps()
-                self.send_data_on_demand('installed_apps', apps)
-            
-            # Marca comando come completato
-            self.mark_command_done(cmd['id'])
-            
-        except Exception as e:
-            print(f"❌ Errore esecuzione comando: {e}")
-
-    def mark_command_done(self, command_id):
-        """Marca comando come completato"""
-        try:
-            requests.patch(
-                f'{SUPABASE_URL}/rest/v1/commands?id=eq.{command_id}',
-                headers=HEADERS,
-                json={'status': 'completed'},
-                timeout=5
-            )
-        except Exception as e:
-            print(f"⚠️ Errore marking comando: {e}")
-
-    def run_loop(self):
-        """Loop principale - MODALITÀ ON-DEMAND"""
-        print(f"🚀 FamilyControl Android Agent avviato")
-        print(f"📡 Modalità ON-DEMAND - Non invia dati automaticamente")
-        print(f"⏰ Controlla comandi ogni 5 secondi")
-        print(f"💾 Database: PROTETTO da spam!\n")
+def get_battery_info():
+    """Ottiene info batteria"""
+    try:
+        result = subprocess.check_output(['dumpsys', 'battery']).decode()
+        battery = {}
         
-        self.register_device()
+        for line in result.split('\n'):
+            if 'level:' in line:
+                battery['level'] = int(line.split(':')[1].strip())
+            if 'temperature:' in line:
+                temp = int(line.split(':')[1].strip()) / 10
+                battery['temperature'] = f"{temp}°C"
+            if 'status:' in line:
+                status_codes = {
+                    '1': 'unknown', 
+                    '2': 'charging', 
+                    '3': 'discharging', 
+                    '4': 'not charging', 
+                    '5': 'full'
+                }
+                code = line.split(':')[1].strip()
+                battery['status'] = status_codes.get(code, code)
+            if 'health:' in line:
+                health_codes = {
+                    '1': 'unknown', '2': 'good', '3': 'overheat',
+                    '4': 'dead', '5': 'over voltage', '6': 'unspecified failure', '7': 'cold'
+                }
+                code = line.split(':')[1].strip()
+                battery['health'] = health_codes.get(code, code)
         
-        while self.running:
-            try:
-                # ⭐ SOLO controlla comandi, NON invia dati
-                self.check_commands()
-                
-                # Aggiorna status minimo
-                self.update_device_status('online')
-                
-                # Aspetta prima di controllare di nuovo
-                time.sleep(5)
-                
-            except KeyboardInterrupt:
-                print("\n⏹️ Agent fermato")
-                print(f"📊 Comandi eseguiti: {self.commands_executed}")
-                self.running = False
-                self.update_device_status('offline')
-            except Exception as e:
-                print(f"❌ Errore loop: {e}")
-                time.sleep(10)
+        return battery if battery else {'error': 'Battery info non disponibile'}
+    except Exception as e:
+        return {'error': f'Errore batteria: {str(e)}'}
 
-if __name__ == '__main__':
-    agent = FamilyControlAgentAndroid()
-    agent.run_loop()
+def get_device_info():
+    """Ottiene info dispositivo"""
+    try:
+        brand = subprocess.check_output(['getprop', 'ro.product.brand']).decode().strip()
+        model = subprocess.check_output(['getprop', 'ro.product.model']).decode().strip()
+        android_version = subprocess.check_output(['getprop', 'ro.build.version.release']).decode().strip()
+        sdk_version = subprocess.check_output(['getprop', 'ro.build.version.sdk']).decode().strip()
+        
+        return {
+            'brand': brand,
+            'model': model,
+            'android_version': android_version,
+            'sdk_version': sdk_version,
+            'device_id': DEVICE_ID
+        }
+    except Exception as e:
+        return {'error': f'Impossibile ottenere info: {str(e)}'}
+
+def get_installed_apps():
+    """Ottiene lista delle app installate (prime 50)"""
+    try:
+        result = subprocess.check_output(['pm', 'list', 'packages'], stderr=subprocess.DEVNULL).decode()
+        apps = [line.replace('package:', '').strip() for line in result.split('\n') if 'package:' in line]
+        # Restituisce solo le prime 50 per non appesantire
+        return apps[:50]
+    except Exception as e:
+        return [f'Errore: {str(e)}']
+
+def send_data(token, data_type, data_content):
+    """Invia dati al backend"""
+    try:
+        response = requests.post(
+            f"{BACKEND_URL}/api/devices/{DEVICE_ID}/data",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "dataType": data_type,
+                "dataContent": data_content
+            },
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            print(f"  📤 {data_type} inviato")
+            return True
+        else:
+            print(f"  ⚠️ Errore invio {data_type}: {response.status_code}")
+            if response.status_code == 404:
+                print(f"     API endpoint non trovato. Verifica il backend.")
+            return False
+    except Exception as e:
+        print(f"  ❌ Errore invio: {e}")
+        return False
+
+def check_commands(token):
+    """Controlla comandi pendenti per il dispositivo"""
+    try:
+        response = requests.get(
+            f"{BACKEND_URL}/api/devices/{DEVICE_ID}/commands",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            commands = response.json()
+            for cmd in commands:
+                print(f"  📡 Comando ricevuto: {cmd.get('command')}")
+                
+                # Esegui il comando
+                result = execute_command(cmd.get('command'))
+                
+                # Segna come completato
+                requests.patch(
+                    f"{BACKEND_URL}/api/commands/{cmd.get('id')}",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={"status": "completed", "result": result},
+                    timeout=5
+                )
+        return True
+    except Exception as e:
+        print(f"  ⚠️ Errore comandi: {e}")
+        return False
+
+def execute_command(command):
+    """Esegue un comando sul dispositivo"""
+    try:
+        if command == "get_battery":
+            return get_battery_info()
+        elif command == "get_device_info":
+            return get_device_info()
+        elif command == "get_apps":
+            return get_installed_apps()
+        elif command == "lock_device":
+            # Blocca schermo (richiede permessi)
+            subprocess.run(['input', 'keyevent', '26'], capture_output=True)
+            return {"status": "locked"}
+        elif command == "take_screenshot":
+            # Screenshot (richiede permessi)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = f"/sdcard/screenshot_{timestamp}.png"
+            subprocess.run(['screencap', '-p', path], capture_output=True)
+            return {"status": "screenshot_taken", "path": path}
+        else:
+            return {"error": f"Comando sconosciuto: {command}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+def update_status(token, status):
+    """Aggiorna lo stato del dispositivo"""
+    try:
+        requests.patch(
+            f"{BACKEND_URL}/api/devices/{DEVICE_ID}/status",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"status": status},
+            timeout=5
+        )
+    except:
+        pass
+
+# ==================== MAIN ====================
+
+def main():
+    print("""
+╔════════════════════════════════════════════════════════════╗
+║     FamilyControl Agent Android (Termux)                  ║
+║     Monitoraggio dispositivi personali                    ║
+╚════════════════════════════════════════════════════════════╝
+    """)
+    
+    print(f"📡 Backend: {BACKEND_URL}")
+    print(f"🔑 Username: {USERNAME}")
+    
+    # Ottieni token
+    token = get_token()
+    if not token:
+        print("\n❌ Impossibile autenticarsi. Riprova tra 10 secondi...")
+        time.sleep(10)
+        return
+    
+    # Registra dispositivo
+    if not register_device(token):
+        print("⚠️ Registrazione fallita, continuo lo stesso...")
+    
+    print(f"\n🚀 Dispositivo: {DEVICE_NAME}")
+    print(f"🆔 ID: {DEVICE_ID}")
+    print(f"📱 Tipo: {DEVICE_TYPE}")
+    
+    # Invia info dispositivo subito
+    print(f"\n📡 Invio info iniziali...")
+    device_info = get_device_info()
+    send_data(token, "device_info", device_info)
+    
+    # Invia lista app (opzionale, commenta se troppo pesante)
+    # apps = get_installed_apps()
+    # send_data(token, "installed_apps", apps)
+    
+    print(f"\n🔄 Avvio monitoraggio (invio ogni 60 secondi)")
+    print(f"   Premi Ctrl+C per fermare\n")
+    
+    counter = 0
+    # Loop principale
+    try:
+        while True:
+            counter += 1
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            print(f"[{timestamp}] Ciclo #{counter}")
+            
+            # Invia batteria
+            battery = get_battery_info()
+            send_data(token, "battery", battery)
+            
+            # Aggiorna stato
+            update_status(token, "online")
+            
+            # Controlla comandi
+            check_commands(token)
+            
+            # Attesa prima del prossimo ciclo
+            print(f"   Attesa 60 secondi...")
+            time.sleep(60)
+            
+    except KeyboardInterrupt:
+        print("\n\n⏹️ Agent fermato manualmente")
+        update_status(token, "offline")
+        print("👋 Arrivederci!")
+
+if __name__ == "__main__":
+    main()
