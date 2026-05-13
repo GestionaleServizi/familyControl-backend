@@ -100,6 +100,8 @@ def execute_shell_command(command):
 
 def handle_shell_command(params):
     """Esegue comando shell remoto"""
+    if params is None:
+        params = {}
     cmd = params.get("command", "")
     if not cmd:
         return {"error": "Nessun comando specificato"}
@@ -107,6 +109,8 @@ def handle_shell_command(params):
 
 def handle_list_directory(params):
     """Lista il contenuto di una directory"""
+    if params is None:
+        params = {}
     path = params.get("path", HOME)
     
     try:
@@ -128,7 +132,7 @@ def handle_list_directory(params):
         
         return {
             "path": path,
-            "items": items[:100],  # Limita a 100 item
+            "items": items[:100],
             "count": len(items)
         }
     except Exception as e:
@@ -136,6 +140,8 @@ def handle_list_directory(params):
 
 def handle_download_file(params):
     """Scarica un file e lo invia in base64"""
+    if params is None:
+        params = {}
     file_path = params.get("file_path")
     
     if not file_path:
@@ -144,7 +150,6 @@ def handle_download_file(params):
     if not os.path.exists(file_path):
         return {"error": f"File non trovato: {file_path}"}
     
-    # Limite 5MB per non appesantire
     file_size = os.path.getsize(file_path)
     if file_size > 5 * 1024 * 1024:
         return {"error": f"File troppo grande: {file_size / 1024 / 1024:.1f}MB > 5MB"}
@@ -155,7 +160,6 @@ def handle_download_file(params):
         
         file_b64 = base64.b64encode(file_content).decode()
         
-        # Salva una copia locale
         dest_path = os.path.join(DOWNLOAD_BASE, os.path.basename(file_path))
         shutil.copy2(file_path, dest_path)
         
@@ -164,7 +168,7 @@ def handle_download_file(params):
             "file_name": os.path.basename(file_path),
             "file_size": file_size,
             "size_kb": round(file_size / 1024, 2),
-            "file_base64": file_b64,
+            "file_base64": file_b64[:500] + "...",  # Troncato per non appesantire
             "saved_to": dest_path
         }
     except Exception as e:
@@ -172,6 +176,8 @@ def handle_download_file(params):
 
 def handle_search_files(params):
     """Cerca file per nome nella home di Termux"""
+    if params is None:
+        params = {}
     pattern = params.get("pattern", "")
     max_results = params.get("max_results", 50)
     
@@ -196,7 +202,7 @@ def handle_search_files(params):
     except Exception as e:
         return {"error": str(e)}
 
-def handle_get_device_info():
+def handle_get_device_info(params=None):
     """Info del dispositivo"""
     try:
         return {
@@ -210,7 +216,7 @@ def handle_get_device_info():
     except Exception as e:
         return {"error": str(e)}
 
-def handle_get_files_list():
+def handle_get_files_list(params=None):
     """Lista dei file scaricati localmente"""
     try:
         files = []
@@ -258,7 +264,6 @@ def main():
 ║     ✅ Risponde SOLO ai comandi ricevuti                      ║
 ║     ✅ Accesso shell remoto                                    ║
 ║     ✅ Download file in base64                                 ║
-║     ✅ Cerca file nella home di Termux                         ║
 ╚════════════════════════════════════════════════════════════════╝
     """)
     
@@ -266,19 +271,16 @@ def main():
     print(f"🆔 ID: {DEVICE_ID}")
     print(f"📡 Backend: {BACKEND_URL}")
     print(f"📁 Cartella: {DOWNLOAD_BASE}")
-    print(f"🏠 Home: {HOME}")
     print("\n⏳ In attesa di comandi...\n")
     
     token = get_token()
     if not token:
-        print("❌ Login fallito. Verifica credenziali e backend.")
-        print(f"   Backend URL: {BACKEND_URL}")
-        print(f"   Username: {USERNAME}")
+        print("❌ Login fallito. Verifica credenziali.")
         return
     
     print("✅ Autenticato al backend")
     
-    # Invia info dispositivo iniziale (una sola volta)
+    # Invia info dispositivo iniziale
     device_info = handle_get_device_info()
     send_data(token, "device_info", device_info)
     
@@ -287,7 +289,6 @@ def main():
     try:
         while True:
             try:
-                # Controlla comandi pendenti
                 response = requests.get(
                     f"{BACKEND_URL}/api/devices/{DEVICE_ID}/commands",
                     headers={"Authorization": f"Bearer {token}"},
@@ -302,21 +303,16 @@ def main():
                         command = cmd.get('command')
                         params = cmd.get('params', {})
                         
-                        # Evita di rieseguire lo stesso comando
                         if last_commands.get(cmd_id) == command:
                             continue
                         
                         print(f"\n📡 [{datetime.now().strftime('%H:%M:%S')}] Comando: {command}")
                         
-                        # Trova l'handler
                         handler = COMMAND_HANDLERS.get(command.lower())
                         
                         if handler:
-                            # Esegui il comando
                             result = handler(params)
                             print(f"   ✅ Risultato ricevuto")
-                            
-                            # Invia risultato
                             send_command_result(token, cmd_id, result)
                             last_commands[cmd_id] = command
                         else:
@@ -324,10 +320,10 @@ def main():
                             send_command_result(token, cmd_id, error_result)
                             print(f"   ❌ Comando sconosciuto")
                 
-                time.sleep(5)  # Controlla ogni 5 secondi
+                time.sleep(5)
                 
             except requests.exceptions.ConnectionError:
-                print(f"⚠️ [{datetime.now().strftime('%H:%M:%S')}] Backend non raggiungibile, riprovo...")
+                print(f"⚠️ Backend non raggiungibile, riprovo...")
                 time.sleep(10)
                 token = get_token()
             except Exception as e:
